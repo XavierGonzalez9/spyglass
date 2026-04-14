@@ -1,53 +1,36 @@
 # 
 # Spyglass Main Application Entry Point
-# Usage:
-#   python main.py         → Interactive terminal mode
-#   python main.py --gui   → PyQt6 graphical interface
-#   python main.py --cli   → Direct terminal mode (no prompt)
+# For keylogger testing, run: python keylogger.py
 # 
 
 import sys
 
 
 def main():
-    # Check for --gui / --cli flags
-    if "--gui" in sys.argv:
-        try:
-            from spyglassGUI import run_gui
-            run_gui()
-        except ImportError as e:
-            print(f"GUI dependencies missing. Install with: pip install PyQt6\n{e}")
-            sys.exit(1)
-        return
-
-    if "--cli" in sys.argv:
-        from spyglass import main as run_test
-        run_test()
-        return
-
-    # Interactive mode — let user choose
+    # Main entry point# 
     print(""" 
 ╔════════════════════════════════════════════════════════════════╗
 ║                      SPYGLASS APPLICATION                      ║
 ╚════════════════════════════════════════════════════════════════╝
 
-  [1] Launch with Graphic Interface        (PyQt6 graphical interface)
-  [2] Launch Terminal    (command-line interface)
-  [3] Exit
+For keystroke logging testing and setup, please run:
+
+    python keylogger.py
+
+This will guide you through:
+  1. User Consent Screen
+  2. Monitoring Level Selection (LOW/HIGH)
+  3. Configuration Setup
+  4. Database Initialization
+  5. Spyglass Demo (Keylogger and App Monitor)
 
 ═══════════════════════════════════════════════════════════════════
     """)
     
-    choice = input("Select option (1-3): ").strip()
+    # Optional: Ask if user wants to run test
+    choice = input("Would you like to start the Spyglass demo? (y/n): ").strip().lower()
     
-    if choice == '1':
-        try:
-            from spyglassGUI import run_gui
-            run_gui()
-        except ImportError as e:
-            print(f"GUI dependencies missing. Install with: pip install PyQt6\n{e}")
-            sys.exit(1)
-    elif choice == '2':
+    if choice == 'y':
         try:
             from spyglass import main as run_test
             run_test()
