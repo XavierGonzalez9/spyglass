@@ -62,6 +62,7 @@ class AlertEngine:
         self.scan_thread = None
         self.lock = threading.Lock()
         self.polling_interval = 15  # seconds
+        self.alert_cooldown_seconds = 60  # allow repeated alerts after a short cooldown
 
         # Keystroke subscription
         self.keystroke_monitor = None
@@ -136,6 +137,8 @@ class AlertEngine:
             return
         logging.info("Setting up Alert Engine with baseline snapshot...")
         self.baseline_pids = {p.pid for p in psutil.process_iter()}
+        with self.lock:
+            self.alert_history.clear()
         self.is_running = True
         self.scan_thread = threading.Thread(target=self.scan_loop, daemon=True)
         self.scan_thread.start()
@@ -193,7 +196,7 @@ class AlertEngine:
         for script in scripts:
             if script['name'].lower() in BLOCKLISTED_APPS:
                 if script['name'].lower() in {'spyglass.exe', 'spyglass.py'}:
-                    msg = f"SPYGLASS is Actively Monitoring"
+                    msg = f"SPYGLASS is now watching your device"
                 else:
                     msg = f"Blocklisted app detected: {script['name']} (PID {script['pid']})"
                 self.raise_alert(
@@ -286,14 +289,27 @@ class AlertEngine:
         self.last_keystroke_snapshot = current_snapshot
         self.last_snapshot_time = now
 
+
+    def _prune_alert_history(self) -> None:
+        """Forget old alerts so the same condition can alert again after cooldown."""
+        cutoff = datetime.now().timestamp() - self.alert_cooldown_seconds
+        with self.lock:
+            self.alert_history = {
+                alert_key: when
+                for alert_key, when in self.alert_history.items()
+                if when.timestamp() >= cutoff
+            }
+
     # ── alert dispatcher ──────────────────────────────────────────
     def raise_alert(self, severity: str, alert_type: str, key: str, message: str,
                     app_name: Optional[str] = None, exe_path: Optional[str] = None):
         #Log alert, update DB, show popup
+        self._prune_alert_history()
         alert_key = (severity, key)
-        if alert_key in self.alert_history:
-            return
-        self.alert_history[alert_key] = datetime.now()
+        with self.lock:
+            if alert_key in self.alert_history:
+                return
+            self.alert_history[alert_key] = datetime.now()
 
         log_level = SEVERITY_TO_LOG_LEVEL.get(severity, logging.WARNING)
         logging.getLogger('app').log(log_level, f"[{severity.upper()}] {message}")
@@ -321,27 +337,26 @@ class AlertEngine:
     def show_popup(self, severity: str, message: str, key: str,
                    alert_id: Optional[int] = None):
         bg = SEVERITY_COLOURS.get(severity, '#000')
-        popup_w, popup_h = 280, 120
+        popup_w, popup_h = 380, 120
         root = tk.Tk()
         root.title(f"SPYGLASS ALERT")
         root.configure(bg=bg)
         root.overrideredirect(True)          # borderless window
         root.attributes("-topmost", True)
-        root.attributes("-alpha", 0.75)      # semi-transparent
         screen_w = root.winfo_screenwidth()
         root.geometry(f"{popup_w}x{popup_h}+{screen_w - popup_w - 75}+20")
         root.resizable(False, False)
 
         # ── title ──
         tk.Label(root, text=f"SPYGLASS ALERT ({severity.upper()})",
-                 font=("Inter UI", 9, "bold"),
+                 font=("Gruppo", 9, "bold"),
                  bg=bg, fg="#ffffff", anchor='w').pack(fill='x', padx=10, pady=(8, 0))
 
         # ── message ──
         tk.Label(root, text=message.upper(),
-                 font=("Inter UI", 8, "bold"),
+                 font=("Gruppo", 8, "bold"),
                  bg=bg, fg="#ffffff",
-                 wraplength=255, justify='left', anchor='nw').pack(fill='both', expand=True, padx=10, pady=(4, 0))
+                 wraplength=355, justify='left', anchor='nw').pack(fill='both', expand=True, padx=10, pady=(4, 0))
 
         # ── button bar ──
         btn_frame = tk.Frame(root, bg=bg)
@@ -359,7 +374,7 @@ class AlertEngine:
                 self.alert_history.pop((severity, key), None)
             root.destroy()
 
-        btn_style = dict(font=("Inter UI", 8, "bold"), fg="#ffffff",
+        btn_style = dict(font=("Gruppo", 8, "bold"), fg="#ffffff",
                          relief='flat', cursor='hand2', pady=4)
         tk.Button(btn_frame, text="DISMISS", command=dismiss,
                   bg="#dad8d8", activebackground="#3e5a6a",
